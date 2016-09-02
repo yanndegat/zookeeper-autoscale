@@ -88,3 +88,8 @@ zk_pending_syncs        0
 -----------
 $ ...
 ```
+
+
+Don't support : Rolling restart ;)
+whenever a node popsup, every other nodes are restarted by consul-template at the same time, which can result in a global unavailability of the zk cluster.
+
