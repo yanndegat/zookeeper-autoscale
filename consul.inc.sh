@@ -8,10 +8,14 @@ CONSUL_CERT=${CONSUL_CERT:-cert.pem}
 CONSUL_KEY=${CONSUL_KEY:-cert-key.pem}
 CONSUL_API_TOKEN=${CONSUL_API_TOKEN:-}
 
+## retrieve container name from yanndegat/docker-inspect service
+###
 containername() {
     curl --fail http://$DOCKER_INSPECT_HOST/container/$(hostname) | jq '.Name' | sed 's/"//g' | cut -d'/' -f2
 }
 
+## CONSUL BASIC MECHANICS
+###
 call_consul(){
     METHOD=$1
     shift
@@ -90,6 +94,17 @@ consul_cluster_lock_timeout(){
     done
 }
 
+
+## HACK/TRICK : Zookeeper's cluster definition consist of a list of static list servers,
+## each server having been assigned a uniq numeric id.
+## The job here is to be able to assign each "docker container name" (which will be the dns name) a
+## unique id, and make it publicly available so that each container can build the static list of servers that will
+## form the cluster. We will store these data in consul. Maybe it would be great to be able to store this directly in zookeeper.
+##
+## Note: to ensure the id is unique, we increment the last id of servers list, with a lock.
+## There are obvioulsy better ways to achieve this. but this is a good starting point.
+## maybe the "CreateIndex" in consul
+###
 consul_cluster_nodes_ids() {
     CLUSTER_ID=$1
     for i in $(call_consul GET /kv/zk_nodes/${CLUSTER_ID}/?recurse | jq '.[].Value' | grep -v null | sed 's/"//g' ); do
