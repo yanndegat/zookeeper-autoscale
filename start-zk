@@ -1,0 +1,75 @@
+#!/bin/bash -ex
+BASEDIR=$(readlink -f $(dirname $0))
+CLUSTER_ID=${CLUSTER_ID:-MYCLUSTER}
+source $BASEDIR/consul.inc.sh
+
+if [ -z "$CLUSTER_ID" ]; then
+    echo "CLUSTER_ID is not set" >&2
+    exit 1
+fi
+
+NODE_ID=$(consul_register_node $CLUSTER_ID)
+if [ "$NODE_ID" == "false" ]; then
+    echo "coulnd't register node. exiting." >&2
+    exit 1
+fi
+
+if [ ! -f /var/lib/zookeeper/myid ]; then
+    echo $NODE_ID > /var/lib/zookeeper/myid
+fi
+
+cat > /opt/zookeeper/conf/zoo.cfg.tmpl <<EOF
+tickTime=2000
+dataDir=/var/lib/zookeeper
+clientPort=2181
+initLimit=5
+syncLimit=2
+
+# servers are output with their container names, which will be resolved by docker internal dns
+{{range service "zk-${CLUSTER_ID}" "passing, warning"}}{{with \$name := .ID | regexReplaceAll "[^:]+:([^:]+):[^:]+" "\$1"}}
+server.{{printf "zk_nodes/${CLUSTER_ID}/%s" \$name | key }}={{\$name}}:2888:3888
+{{end}}{{end}}
+EOF
+
+cat > /opt/zookeeper/conf/consul-template.conf <<EOF
+consul = "$CONSUL_HOST:$CONSUL_PORT"
+
+template {
+  source = "/opt/zookeeper/conf/zoo.cfg.tmpl"
+  destination = "/opt/zookeeper/conf/zoo.cfg"
+}
+
+exec {
+  command = "/opt/zookeeper/bin/zkServer.sh start-foreground"
+}
+
+deduplicate {
+  enabled = true
+  prefix = "consul-template/dedup/"
+}
+
+EOF
+
+
+if [ "$CONSUL_USESSL" == 1 ]; then
+    cat >> /opt/zookeeper/conf/consul-template.conf <<EOF
+ssl {
+  enabled = true
+  verify = true
+  cert = "/certs/$CONSUL_CERT"
+  key = "/certs/$CONSUL_KEY"
+  ca_cert = "/certs/$CONSUL_CACERT"
+}
+EOF
+fi
+
+if [ ! -z "$CONSUL_API_TOKEN" ]; then
+    cat >> /opt/zookeeper/conf/consul-template.conf <<EOF
+token = "$CONSUL_TOKEN"
+EOF
+fi
+
+/bin/consul-template -config /opt/zookeeper/conf/consul-template.conf
+
+
+

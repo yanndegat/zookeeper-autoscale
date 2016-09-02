@@ -1,0 +1,33 @@
+version: '2'
+
+services:
+  consul:
+    image: consul:v0.6.4
+    command: agent -dev -client 0.0.0.0 -ui
+
+  registrator:
+    image: gliderlabs/registrator
+    command: -cleanup consul://localhost:8500
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+    network_mode: service:consul
+
+  inspector:
+    image: yanndegat/docker-inspect
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    network_mode: service:consul
+
+  zk:
+    build: .
+    environment:
+      - CONSUL_HOST=consul
+      - DOCKER_INSPECT_HOST=consul:2204
+      - SERVICE_2181_NAME=zk-MYCLUSTER
+      # - SERVICE_2181_CHECK_TCP=true
+      # - SERVICE_2181_CHECK_INTERVAL=15s
+      # - SERVICE_2181_CHECK_TIMEOUT=1s
+      - CLUSTER_ID=MYCLUSTER
+    ports:
+      - 2181
+
