@@ -3,7 +3,19 @@ Autoscaling Zookeeper Docker Container!
 
 I don't know all the mechanics behind zookeeper & there're obviously tons of config parameters i'm missing. Yet, it seems to autoscale, thanks to consul & consul-template.
 
-First working iteration
+
+Depencencies
+---
+- consul
+- consul-template
+- gliderlabs/registrator
+- yanndegat/docker-inspect
+
+
+Run
+---
+Have a look at the [docker-compose.yml](https://github.com/yanndegat/zookeeper-autoscale/tree/master/docker-compose.yml) file. and then you can try to play with it 
+by running the following commands:
 
 ```shell
 $ docker-compose up -d --build
