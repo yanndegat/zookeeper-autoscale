@@ -3,7 +3,7 @@ FROM jplock/zookeeper:3.4.8
 ENV DOCKER_BASE_VERSION=0.0.4 \
     CONSUL_TEMPLATE_VERSION=0.15.0
 
-RUN addgroup zk && adduser -$S -G zk zk
+RUN addgroup zk && adduser -S -G zk zk
 
 # Set up certificates, our base tools, and Consul.
 RUN apk add --no-cache jq curl ca-certificates gnupg openssl && \
