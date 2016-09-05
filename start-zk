@@ -12,9 +12,7 @@ NODE_ID=$(consul_register_node $CLUSTER_ID)
 if [ "$NODE_ID" == "false" ]; then
     echo "coulnd't register node. exiting." >&2
     exit 1
-fi
-
-if [ ! -f /var/lib/zookeeper/myid ]; then
+else
     echo $NODE_ID > /var/lib/zookeeper/myid
 fi
 
@@ -26,9 +24,12 @@ initLimit=5
 syncLimit=2
 
 # servers are output with their container names, which will be resolved by docker internal dns
-{{range service "zk-${CLUSTER_ID}" "passing, warning"}}{{with \$name := .ID | regexReplaceAll "[^:]+:([^:]+):[^:]+" "\$1"}}
+{{range service "zk-${CLUSTER_ID}" "passing, warning"}}{{with \$name := .ID | regexReplaceAll "[^:]+:([^:]+):[^:]+" "\$1"}}{{if ne \$name "${CONTAINER_NAME}"}}
 server.{{printf "zk_nodes/${CLUSTER_ID}/%s" \$name | key }}={{\$name}}:2888:3888
-{{end}}{{end}}
+{{end}}{{end}}{{end}}
+
+# adding myself, because i might not be in the passing service list
+server.$NODE_ID=${CONTAINER_NAME}:2888:3888
 EOF
 
 cat > /opt/zookeeper/conf/consul-template.conf <<EOF

@@ -101,39 +101,17 @@ consul_cluster_lock_timeout(){
 ## unique id, and make it publicly available so that each container can build the static list of servers that will
 ## form the cluster. We will store these data in consul. Maybe it would be great to be able to store this directly in zookeeper.
 ##
-## Note: to ensure the id is unique, we increment the last id of servers list, with a lock.
-## There are obvioulsy better ways to achieve this. but this is a good starting point.
-## maybe the "CreateIndex" in consul
+## Note: to ensure the id is unique across the cluster, we will make use of the "CreateIndex" in consul
 ###
-consul_cluster_nodes_ids() {
-    CLUSTER_ID=$1
-    for i in $(call_consul GET /kv/zk_nodes/${CLUSTER_ID}/?recurse | jq '.[].Value' | grep -v null | sed 's/"//g' ); do
-        echo $(echo $i | base64 -d);
-    done
-}
-
-consul_cluster_next_id(){
-    CLUSTER_ID=$1
-    NODES_IDS=$(consul_cluster_nodes_ids $CLUSTER_ID)
-
-    if [ -z "$NODES_IDS" ]; then
-        echo 1
-    else
-        echo $(($(IFS=" "; echo $NODES_IDS | sort -nr | head -1) + 1))
-    fi
-}
-
 consul_register_node(){
     CLUSTER_ID=$1
-    if [[ "$(consul_cluster_lock_timeout $CLUSTER_ID)" == "true" ]]; then
-        NODE_ID=$(consul_cluster_next_id $CLUSTER_ID)
-        call_consul PUT /kv/zk_nodes/$CLUSTER_ID/$CONTAINER_NAME -d $NODE_ID >&2
-        consul_cluster_unlock $CLUSTER_ID > /dev/null 2>&1
-        echo $NODE_ID
-    else
-        echo "cloudn't register node within timeout" >&2
-        echo false
-    fi
+    #create/update the entry
+    call_consul PUT /kv/zk_nodes/$CLUSTER_ID/$CONTAINER_NAME >&2
+    #get the createindex
+    NODE_ID=$(call_consul GET /kv/zk_nodes/$CLUSTER_ID/$CONTAINER_NAME | jq '.[].CreateIndex' | sed 's/"//g')
+    #update the value to make available from consul-template
+    call_consul PUT /kv/zk_nodes/$CLUSTER_ID/$CONTAINER_NAME -d $NODE_ID >&2
+    echo $NODE_ID
 }
 
 if [ "$CONSUL_USESSL" == 1 ]; then
