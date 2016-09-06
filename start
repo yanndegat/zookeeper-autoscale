@@ -1,16 +1,16 @@
-#!/bin/bash -ex
+#!/bin/bash -x
 BASEDIR=$(readlink -f $(dirname $0))
-CLUSTER_ID=${CLUSTER_ID:-MYCLUSTER}
+CLUSTER_ID=${CLUSTER_ID}
 source $BASEDIR/consul.inc.sh
 
 if [ -z "$CLUSTER_ID" ]; then
-    echo "CLUSTER_ID is not set" >&2
+    echo ">>> CLUSTER_ID is not set" >&2
     exit 1
 fi
 
 NODE_ID=$(consul_register_node $CLUSTER_ID)
 if [ "$NODE_ID" == "false" ]; then
-    echo "coulnd't register node. exiting." >&2
+    echo ">>> coulnd't register node. exiting." >&2
     exit 1
 else
     echo $NODE_ID > /var/lib/zookeeper/myid
@@ -38,11 +38,13 @@ consul = "$CONSUL_HOST:$CONSUL_PORT"
 template {
   source = "/opt/zookeeper/conf/zoo.cfg.tmpl"
   destination = "/opt/zookeeper/conf/zoo.cfg"
+  command = "/rolling-restart-zk"
 }
 
-exec {
-  command = "/opt/zookeeper/bin/zkServer.sh start-foreground"
-}
+//exec {
+//  command = "/rolling-restart-zk"
+//  reload_signal = "SIGINT"
+//}
 
 deduplicate {
   enabled = true
@@ -50,7 +52,6 @@ deduplicate {
 }
 
 EOF
-
 
 if [ "$CONSUL_USESSL" == 1 ]; then
     cat >> /opt/zookeeper/conf/consul-template.conf <<EOF
@@ -71,6 +72,3 @@ EOF
 fi
 
 /bin/consul-template -config /opt/zookeeper/conf/consul-template.conf
-
-
-

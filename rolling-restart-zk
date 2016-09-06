@@ -1,0 +1,101 @@
+#!/bin/bash -x
+BASEDIR=$(readlink -f $(dirname $0))
+CLUSTER_ID=${CLUSTER_ID}
+source $BASEDIR/consul.inc.sh
+
+if [ -z "$CLUSTER_ID" ]; then
+    echo ">>> CLUSTER_ID is not set" >&2
+    exit 1
+fi
+
+lock(){
+    timeout true consul_cluster_lock $CLUSTER_ID
+}
+
+unlock(){
+    consul_cluster_unlock $CLUSTER_ID > /dev/null 2>&1
+}
+
+startzk(){
+    nohup /opt/zookeeper/bin/zkServer.sh start-foreground &
+    echo $! > /var/run/zookeeper.pid
+}
+
+PID(){
+   cat /var/run/zookeeper.pid
+}
+
+stopzk(){
+    echo ">>> killing $(PID)"
+    kill -9 $(PID) >&2
+}
+
+sig_quit(){
+    echo ">>> QUIT!" >&2
+    stopzk
+}
+
+sig_term(){
+    echo ">>> TERM!" >&2
+    stopzk
+}
+
+sig_kill(){
+    echo ">>> KILL!" >&2
+    stopzk
+}
+
+sig_int(){
+    echo ">>> INT!" >&2
+    reload
+}
+
+ok(){
+    timeout imok sh -c 'echo "ruok" | nc localhost 2181'
+}
+
+reload(){
+    if [ "$(lock)" == "true" ]; then
+        echo ">>> LOCKED!" >&2
+        stopzk
+        start
+    else
+        echo ">>> cloudn't lock within timeout" >&2
+        exit 1
+    fi
+}
+
+start(){
+    if [ "$(lock)" == "true" ]; then
+        echo ">>> LOCKED!" >&2
+        startzk
+        # don't release the lock before zk is online or after timeout
+        OK=$(ok)
+        unlock
+        echo ">>> UNLOCKED!" >&2
+        if [ "$OK" == "false" ]; then
+            echo ">>> getting imok status timed out." >&2
+            stopzk
+            exit 1
+        fi
+        echo ">>>> ======" >&2
+        ps -edaf
+        echo ">>>> ======" >&2
+#        wait "$(PID)"
+    else
+        echo ">>> cloudn't lock within timeout" >&2
+        exit 1
+    fi
+}
+
+trap sig_term SIGTERM
+trap sig_quit SIGQUIT
+trap sig_kill SIGKILL
+trap sig_int SIGINT
+
+if [ -z $(PID) ]; then
+    start
+else
+    reload
+fi
+

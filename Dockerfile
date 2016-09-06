@@ -29,7 +29,7 @@ RUN apk add --no-cache jq curl ca-certificates gnupg openssl && \
     rm -rf /root/.gnupg
 
 #patch waiting for consul-template 0.16 release
-COPY ./consul-template /bin/consul-template
+#COPY ./consul-template /bin/consul-template
 
 ENV CLUSTER_ID="MYCLUSTER" \
     DOCKER_INSPECT_HOST="localhost" \
@@ -49,8 +49,9 @@ VOLUME ["/tmp/zookeeper", "/certs", "/var/lib/zookeeper"]
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-CMD ["/start-zk"]
+CMD ["/start"]
 
 COPY ./docker-entrypoint.sh /
 COPY ./consul.inc.sh /
-COPY ./start-zk /
+COPY ./start /
+COPY ./rolling-restart-zk /

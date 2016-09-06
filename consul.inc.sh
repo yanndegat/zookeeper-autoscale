@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 DOCKER_INSPECT_HOST=${DOCKER_INSPECT_HOST}
 CONSUl_HOST=${CONSUL_HOST}
 CONSUL_PORT=${CONSUL_PORT:-8500}
@@ -11,7 +11,9 @@ CONSUL_API_TOKEN=${CONSUL_API_TOKEN:-}
 ## retrieve container name from yanndegat/docker-inspect service
 ###
 containername() {
-    curl --fail http://$DOCKER_INSPECT_HOST/container/$(hostname) | jq '.Name' | sed 's/"//g' | cut -d'/' -f2
+    JSON=$(curl --silent --fail http://$DOCKER_INSPECT_HOST/container/$(hostname))
+    echo ">>> json from inspector: $JSON" >&2
+    echo $JSON | jq '.Name' | sed 's/"//g' | cut -d'/' -f2
 }
 
 ## CONSUL BASIC MECHANICS
@@ -37,12 +39,12 @@ call_consul(){
 consul_new_session(){
     TMPFILE=$(mktemp)
     cat > "$TMPFILE" <<EOF
-{"Name":"$(hostname)", "TTL": "60s", "LockDelay" : "60s"}
+{"Name":"$(hostname)", "TTL": "10s", "LockDelay" : "10s"}
 EOF
     call_consul PUT "/session/create" \
            -d @"$TMPFILE" | jq '.ID' | sed 's/"//g' > /tmp/consul_zk.session
     rm "$TMPFILE"
-    echo "$CONTAINER_NAME created session $(cat /tmp/consul_zk.session)" >&2
+    echo ">>> $CONTAINER_NAME created session $(cat /tmp/consul_zk.session)" >&2
 
     cat /tmp/consul_zk.session
 }
@@ -51,9 +53,9 @@ consul_cluster_lock(){
     CLUSTER_ID=$1
     touch /tmp/consul_zk.session
     SESSION_ID=$(cat /tmp/consul_zk.session)
-    echo "$CONTAINER_NAME locking session $SESSION_ID" >&2
+    echo ">>> $CONTAINER_NAME locking session $SESSION_ID" >&2
     if [ ! -z "$SESSION_ID" ]; then
-        call_consul PUT "/session/renew/$SESSION_ID" >&2
+        call_consul PUT "/session/renew/$SESSION_ID" > /dev/null 2>&1
         if [ $? != 0 ]; then
             SESSION_ID=$(consul_new_session)
         fi
@@ -68,28 +70,38 @@ consul_cluster_lock(){
 consul_cluster_unlock(){
     CLUSTER_ID=$1
     SESSION_ID=$(cat /tmp/consul_zk.session)
-    echo "$CONTAINER_NAME unlocking session $SESSION_ID" >&2
+    echo ">>> $CONTAINER_NAME unlocking session $SESSION_ID" >&2
     if [ ! -z "$SESSION_ID" ]; then
         # if LOCKED : consul returns "true"
         call_consul PUT "/kv/zk_nodes/${CLUSTER_ID}-lock?release=$SESSION_ID"
     else
-        echo "Missing session" >&2
+        echo ">>> Missing session" >&2
         echo false
     fi
 }
 
-consul_cluster_lock_timeout(){
+timeout(){
+    expect_res=$1
+    shift
     now=$(date +%s)
     timeout=$(( now + 60 ))
     set +e
+    echo ">>> waiting for '$expect_res' from cmd: $@" >&2
     while :; do
         if [[ $timeout -lt $(date +%s) ]]; then
-            echo "timeout! could not acquire lock" >&2
+            echo ">>> timeout expecting '$expect_res' from '$@'" >&2
             echo false
+            break
         fi
-        LOCK=$(consul_cluster_lock $@)
-        echo "response from consul lock: $LOCK" >&2
-        [[ $LOCK == "true" ]] && echo true && break
+        res=$("$@")
+        if [[ "$res" == "$expect_res" ]]; then
+            echo ">>> got expected res from command '$@' == '$res'" >&2
+            echo "$res";
+            break
+        else
+            echo ">>> unexpected res: '$res'" >&2
+        fi
+
         sleep 1
     done
 }
@@ -116,36 +128,36 @@ consul_register_node(){
 
 if [ "$CONSUL_USESSL" == 1 ]; then
     if [ -z "$CONSUL_CACERT" ] || [ ! -f "/certs/$CONSUL_CACERT" ]; then
-        echo "CONSUL_CACERT is not set" >&2
+        echo ">>> CONSUL_CACERT is not set" >&2
         exit 1
     fi
 
     if [ -z "$CONSUL_CERT" ] || [ ! -f "/certs/$CONSUL_CERT" ]; then
-        echo "CONSUL_CERT is not set" >&2
+        echo ">>> CONSUL_CERT is not set" >&2
         exit 1
     fi
     if [ -z "$CONSUL_KEY" ] || [ ! -f "/certs/$CONSUL_KEY" ]; then
-        echo "CONSUL_KEY is not set" >&2
+        echo ">>> CONSUL_KEY is not set" >&2
         exit 1
     fi
 fi
 
 if [ -z "$CONSUL_HOST" ]; then
-    echo "CONSUL_HOST is not set" >&2
+    echo ">>> CONSUL_HOST is not set" >&2
     exit 1
 fi
 if [ -z "$DOCKER_INSPECT_HOST" ]; then
-    echo "DOCKER_INSPECT_HOST is not set" >&2
+    echo ">>> DOCKER_INSPECT_HOST is not set" >&2
     exit 1
 fi
 
 if [ -z "$CONSUL_PORT" ]; then
-    echo "CONSUL_PORT is not set" >&2
+    echo ">>> CONSUL_PORT is not set" >&2
     exit 1
 fi
 
 if [ -z "$CONSUL_HOST" ]; then
-    echo "CONSUL_HOST not set." >&2
+    echo ">>> CONSUL_HOST not set." >&2
     exit 1
 fi
 

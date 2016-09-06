@@ -23,8 +23,9 @@ services:
       - CONSUL_HOST=consul
       - DOCKER_INSPECT_HOST=inspector:2204
       - SERVICE_2181_NAME=zk-MYCLUSTER
-      - SERVICE_2181_CHECK_SCRIPT=echo ruok | nc $$SERVICE_IP $$SERVICE_PORT | grep imok
-      - SERVICE_2181_CHECK_INTERVAL=15s
+      - SERVICE_2181_CHECK_SCRIPT=sh -c 'echo ruok | nc $$SERVICE_IP 2181 | grep imok'
+      # set a check interval > time to make a full rolling restart of your cluster
+      - SERVICE_2181_CHECK_INTERVAL=30s
       - SERVICE_2181_CHECK_TIMEOUT=1s
       - CLUSTER_ID=MYCLUSTER
     expose:
