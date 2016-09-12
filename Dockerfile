@@ -22,7 +22,7 @@ RUN apk add --no-cache jq curl ca-certificates gnupg openssl && \
     gpg --batch --verify consul-template_${CONSUL_TEMPLATE_VERSION}_SHA256SUMS.sig consul-template_${CONSUL_TEMPLATE_VERSION}_SHA256SUMS && \
     grep ${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip consul-template_${CONSUL_TEMPLATE_VERSION}_SHA256SUMS | sha256sum -c && \
     unzip consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip && \
-    cp bin/dumb-init consul-template /bin && \
+    cp bin/gosu bin/dumb-init consul-template /bin && \
     cd /tmp && \
     rm -rf /tmp/build && \
     apk del gnupg && \
